@@ -36,7 +36,7 @@ python3 -m http.server 8899
 
 直接访问在线地址，无需安装任何环境：
 
-**https://chenying612.github.io/study-workbench/学习工作台.html**
+**https://chenying612.github.io/study-workbench/**
 
 打开后可安装为应用，离线使用：
 
