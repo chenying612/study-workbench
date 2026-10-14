@@ -394,6 +394,9 @@ tr:hover td{background:#fafbfc}
           <div class="card-header">
             <div class="card-title">每周课表</div>
             <div style="display:flex;gap:10px;align-items:center">
+              <button class="btn btn-ghost" onclick="exportCourseSchedule()">📤 分享课表</button>
+              <button class="btn btn-ghost" onclick="document.getElementById('course-import-file').click()">📥 导入课表</button>
+              <input type="file" id="course-import-file" accept=".json" style="display:none" onchange="importCourseSchedule(event)">
               <button class="btn btn-ghost" onclick="exportCoursesImage()">📷 导出截图</button>
               <button class="btn btn-ghost" onclick="openSubjectModal()">📚 课程库</button>
               <button class="btn btn-ghost" onclick="openSlotModal()">⚙ 时间段管理</button>
@@ -4080,6 +4083,66 @@ async function exportCoursesImage(){
     a.remove();
     toast('课程表截图已导出');
   }catch(e){ console.error(e); toast('截图生成失败，请重试'); }
+}
+
+// ---- 课表分享（导出/导入） ----
+// 导出：仅工作日（周一~周五）且开始时间 < 18:00 的课程，附带时间段和科目库
+function exportCourseSchedule(){
+  const courses = (store.courses||[]).filter(c=>{
+    if(c.day < 1 || c.day > 5) return false;
+    const start = c.slotId ? (store.courseSlots||[]).find(s=>s.id===c.slotId)?.start : c.customStart;
+    return start && t2m(start) < 1080;
+  });
+  if(!courses.length){ toast('暂无可分享的工作日课程'); return; }
+  // 只保留被工作日白天课程引用的科目和时间段
+  const usedSubjectNames = new Set(courses.map(c=>c.subject));
+  const usedSlotIds = new Set(courses.map(c=>c.slotId).filter(Boolean));
+  const subjects = (store.subjects||[]).filter(s=>usedSubjectNames.has(s.name));
+  const courseSlots = (store.courseSlots||[]).filter(s=>usedSlotIds.has(s.id));
+  const data = {
+    type: 'course-schedule',
+    exportedAt: new Date().toISOString(),
+    courses: courses,
+    courseSlots: courseSlots,
+    subjects: subjects
+  };
+  const now = new Date();
+  const dstr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.download = `课表_${dstr}.json`;
+  a.href = URL.createObjectURL(blob);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+  toast(`已导出 ${courses.length} 门工作日课程`);
+}
+
+// 导入：覆盖模式，替换课程、时间段、科目库
+function importCourseSchedule(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const data = JSON.parse(e.target.result);
+      if(data.type !== 'course-schedule'){ toast('文件格式不正确，请选择课表分享文件'); return; }
+      if(!Array.isArray(data.courses) || !Array.isArray(data.courseSlots)){ toast('文件缺少课程或时间段数据'); return; }
+      // 覆盖模式
+      store.courses = data.courses;
+      store.courseSlots = data.courseSlots;
+      if(Array.isArray(data.subjects)) store.subjects = data.subjects;
+      saveData();
+      renderCourses();
+      toast(`课表已导入，共 ${data.courses.length} 门课程`);
+    }catch(err){
+      console.error(err);
+      toast('导入失败，请检查文件是否正确');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
 }
 
 // ---- Course time slots ----
